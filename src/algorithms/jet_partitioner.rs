@@ -53,9 +53,9 @@ where
                           &locked_vertices,
                           filter_ratio);
 
-            // Based on the suggested moves of the jetlp subroutine, we lock the vertices to ensure
-            // that they don't become eligible to move in the next iteration. This prevents oscillation
-            // of vertices
+            // Based on the suggested moves of the jetlp subroutine, the vertices to be moved are locked
+            // to ensure that they don't become eligible to move in the next iteration.
+            // This prevents oscillation of vertices
             locked_vertices = get_locked_vertices(&moves);
         } else {
             // the jetrw subroutine is run to balance the weights of the partition
@@ -93,7 +93,7 @@ where
             imbalance(num_of_partitions,
                       &partition_best,
                       weights.par_iter().cloned()) {
-            // Current iteration is better balanced than the best iteration, hence we make this
+            // Current iteration is better balanced than the best iteration, hence this is made
             // the best iteration
             partition_best = partition_iter.to_vec();
             current_iteration = 0
@@ -125,7 +125,7 @@ where
                 }
             }
 
-            // If the vertex has neighbors that belong to different vertices we calculate the gain
+            // If the vertex has neighbors that belong to different partitions, then the gain is calculated
             // to find out which of them would cause the edge cut to become better.
             if neighbors_eligible_partitions.len() != 0 {
                 partition_dest[vertex] = get_most_connected_partition(vertex,
@@ -140,7 +140,7 @@ where
         }
     }
 
-    // We apply a filter to check which of the vertices are eligible for moving from one partition
+    // First filter is applied to check which of the vertices are eligible for moving from one partition
     // to another. Either the gain should be positive or can be slightly negative (based on the filter ratio).
     // Slightly negative gain vertices are also considered in the hope that they could provide better global solutions
     let first_filter_eligible_moves = gain_conn_ratio_filter(
@@ -150,8 +150,8 @@ where
                                                              vertex_connectivity_data_structure,
                                                              filter_ratio);
 
-    // We now try to approximate the true gain that would occur as two positive moves can when
-    // applied simultaneously can be detrimental.
+    // A heuristic attempt is made to approximate the true gain that would occur since
+    // two positive moves when applied simultaneously can be detrimental.
     let mut gain2:HashMap<usize, i64> = HashMap::new();
 
     for &vertex in &first_filter_eligible_moves {
@@ -171,81 +171,9 @@ where
         }
     }
 
-    // From the newly calculated approximate gain values, we generate moves that yield positive gain.
+    // From the newly calculated approximate gain values, moves that yield positive gain are generated.
     non_negative_gain_filter(&first_filter_eligible_moves, &partition_dest, &gain2)
 }
-
-// fn jetlp_rayon<T>(graph: &T, partition: &[usize], vertex_connectivity_data_structure: &Vec<HashMap<usize, i64>>, locked_vertices: &HashSet<usize>, num_partitions: usize, filter_ratio: f64) -> Vec<Move>
-// where
-//     T: Topology<i64> + Sync{
-//     //let mut partition_dest = partition.to_vec();
-//     //let mut gain = vec![0; graph.len()];
-//
-//     // iterate over all the vertices to find out which vertices provides the best gain (decrease in edge cut)
-//     let (partition_dest, gain): (Vec<usize>, Vec<i64>) = (0..graph.len()).into_par_iter().map(|vertex| {
-//         let mut partition_dest = partition[vertex];
-//         let mut calculated_gain = 0.0;
-//         if !locked_vertices.contains(&vertex) {
-//
-//             // Stores the neighbors of the vertex that belong to different partition as that of the vertex.
-//             let mut neighbors_eligible_partitions = Vec::new();
-//
-//             for (neighbor_vertex, _) in graph.neighbors(vertex) {
-//                 if partition[neighbor_vertex] != partition[vertex] {
-//                     neighbors_eligible_partitions.push(partition[neighbor_vertex]);
-//                 }
-//             }
-//
-//             // If the vertex has neighbors that belong to different vertices we calculate the gain
-//             // to find out which of them would cause the edge cut to become better.
-//             if neighbors_eligible_partitions.len() != 0 {
-//                 let partition_dest = get_most_connected_partition(vertex,
-//                                                                       &neighbors_eligible_partitions,
-//                                                                       vertex_connectivity_data_structure);
-//
-//                 let calculated_gain = conn(vertex, partition_dest,
-//                                     &vertex_connectivity_data_structure)
-//                     - conn(vertex, partition[vertex],
-//                            &vertex_connectivity_data_structure);
-//             }
-//         }
-//         (partition_dest, calculated_gain)
-//     }).unzip();
-//
-//     // We apply a filter to check which of the vertices are eligible for moving from one partition
-//     // to another. Either the gain should be positive or can be slightly negative (based on the filter ratio).
-//     // Slightly negative gain vertices are also considered in the hope that they could provide better global solutions
-//     let first_filter_eligible_moves = gain_conn_ratio_filter(
-//                                                              locked_vertices,
-//                                                              partition,
-//                                                              &gain,
-//                                                              vertex_connectivity_data_structure,
-//                                                              filter_ratio);
-//
-//     // We now try to approximate the true gain that would occur as two positive moves can when
-//     // applied simultaneously can be detrimental.
-//     let mut gain2:HashMap<usize, i64> = HashMap::new();
-//
-//     first_filter_eligible_moves.par_iter().for_each(|&vertex| {
-//
-//         for (neighbor_vertex, edge_weight) in graph.neighbors(vertex){
-//             let mut partition_source = partition[neighbor_vertex];
-//
-//             if is_higher_placed(neighbor_vertex, vertex, &gain, &first_filter_eligible_moves) {
-//                 partition_source = partition_dest[neighbor_vertex];
-//             }
-//
-//             if partition_source == partition_dest[vertex] {
-//                 *gain2.entry(vertex).or_insert(0) += edge_weight;
-//             } else if partition_source == partition[vertex]{
-//                 *gain2.entry(vertex).or_insert(0) -= edge_weight;
-//             }
-//         }
-//     });
-//
-//     // From the newly calculated approximate gain values, we generate moves that yield positive gain.
-//     non_negative_gain_filter(&first_filter_eligible_moves, &partition_dest, &gain2)
-// }
 
 fn jetrw<T>(graph: &T, partitions: &[usize], vertex_weights: &[f64], vertex_connectivity_data_structure: &Vec<HashMap<usize, i64>>, num_partitions: usize, balance_factor: f64) -> Vec<Move>
 where
@@ -260,14 +188,14 @@ where
     let mut heavy_partitions: Vec<usize> = Vec::new();
     let mut light_partitions: Vec<usize> = Vec::new();
 
-    // We set what the max weight of the destination partition can be.
+    // Set what the max weight of the destination partition can be.
     // This is to prevent oscillations when the jetrw algorithm is rerun
     let mut max_weight_dest = max_weight_per_partitions*0.99;
     if max_weight_dest < max_weight_per_partitions - 100f64 {
         max_weight_dest = max_weight_per_partitions - 100f64;
     }
 
-    // We find out what the partitions are heavy (need to be downsized) and what partitions are light
+    // Find out which the partitions are heavy (need to be downsized) and what partitions are light
     // (can act as valid destination partitions).
     for partition in 0..num_partitions{
 
@@ -280,7 +208,7 @@ where
         }
     }
 
-    // We find out the loss for each eligible vertex move (from an overwight partition to an underweight partition).
+    // Find out the loss for each eligible vertex move (from an overweight partition to an underweight partition).
     // A positive loss indicates an increase in edge cut.
     for vertex in 0..num_of_vertices{
         let weight_of_partition = get_weight_of_partition(partitions[vertex],
@@ -311,7 +239,7 @@ where
         }
     }
 
-    // We slot the loss values into different buckets. This is to prevent sorting the loss values
+    // Slot the loss values into different buckets. This is to prevent sorting the loss values
     // which can be expensive.
     let mut bucket = init_bucket(heavy_partitions.len(), max_slots);
 
@@ -324,12 +252,13 @@ where
         }
     }
 
-    // For each of the heavy partitions we decide the vertices that can be moved from the
+    // For each of the heavy partitions, decide the vertices that can be moved from the
     // heavy partitions such that the increase in edge cut is minimized.
     let mut moves = Vec::new();
     for (index, &heavy_partition) in heavy_partitions.iter().enumerate(){
         let mut m = 0f64;
-        let m_max = get_weight_of_partition(heavy_partition,
+        let m_max = get_weight_of_partition(
+                                            heavy_partition,
                                             partitions,
                                             vertex_weights) - max_weight_per_partitions;
 
