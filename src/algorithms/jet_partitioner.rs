@@ -6,7 +6,6 @@ use num_traits::ToPrimitive;
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
 
-
 #[derive(Debug)]
 struct Move {
     // Struct to store data about a move that can either lead to better edge cuts or
@@ -108,37 +107,41 @@ where
 fn jetlp<T>(graph: &T, partition: &[usize], vertex_connectivity_data_structure: &Vec<HashMap<usize, i64>>, locked_vertices: &HashSet<usize>, filter_ratio: f64) -> Vec<Move>
 where
     T: Topology<i64> + Sync{
-    let mut partition_dest = partition.to_vec();
-    let mut gain = vec![0; graph.len()];
 
     // iterate over all the vertices to find out which vertices provides the best gain (decrease in edge cut)
-    for vertex in 0..graph.len() {
-
+    let (partition_dest, gain): (Vec<usize>, Vec<i64>) = (0..graph.len()).into_par_iter().map(|vertex| {
+        let mut calculated_gain = 0;
+        let mut dest_partition = 0;
         if !locked_vertices.contains(&vertex) {
-
-            // Stores the neighbors of the vertex that belong to different partition as that of the vertex.
             let mut neighbors_eligible_partitions = Vec::new();
 
-            for (neighbor_vertex, _) in graph.neighbors(vertex) {
+            for (neighbor_vertex, _edge_weight) in graph.neighbors(vertex) {
                 if partition[neighbor_vertex] != partition[vertex] {
                     neighbors_eligible_partitions.push(partition[neighbor_vertex]);
                 }
             }
 
-            // If the vertex has neighbors that belong to different partitions, then the gain is calculated
-            // to find out which of them would cause the edge cut to become better.
-            if neighbors_eligible_partitions.len() != 0 {
-                partition_dest[vertex] = get_most_connected_partition(vertex,
-                                                                      &neighbors_eligible_partitions,
-                                                                      vertex_connectivity_data_structure);
+            if !neighbors_eligible_partitions.is_empty() {
+                dest_partition = get_most_connected_partition(
+                    vertex,
+                    &neighbors_eligible_partitions,
+                    vertex_connectivity_data_structure,
+                );
 
-                gain[vertex] = conn(vertex, partition_dest[vertex],
-                                    &vertex_connectivity_data_structure)
-                    - conn(vertex, partition[vertex],
-                           &vertex_connectivity_data_structure);
+                calculated_gain = conn(
+                    vertex,
+                    dest_partition,
+                    vertex_connectivity_data_structure,
+                ) - conn(
+                    vertex,
+                    partition[vertex],
+                    vertex_connectivity_data_structure,
+                );
+
             }
         }
-    }
+        (dest_partition, calculated_gain)
+    }).unzip();
 
     // First filter is applied to check which of the vertices are eligible for moving from one partition
     // to another. Either the gain should be positive or can be slightly negative (based on the filter ratio).
@@ -180,10 +183,8 @@ where
     T: Topology<i64> + Sync {
 
     let max_slots: usize = 25;
-    let mut partitions_dest = partitions.to_vec();
     let total_weight: f64 = vertex_weights.iter().cloned().sum();
     let max_weight_per_partitions = (1f64 + balance_factor)*total_weight/(num_partitions as f64);
-    let mut loss = vec![0; partitions.len()];
     let num_of_vertices = graph.len();
     let mut heavy_partitions: Vec<usize> = Vec::new();
     let mut light_partitions: Vec<usize> = Vec::new();
@@ -210,11 +211,14 @@ where
 
     // Find out the loss for each eligible vertex move (from an overweight partition to an underweight partition).
     // A positive loss indicates an increase in edge cut.
-    for vertex in 0..num_of_vertices{
+    let (partitions_dest, loss): (Vec<usize>, Vec<i64>) = (0..num_of_vertices).into_par_iter().map(|vertex| {
         let weight_of_partition = get_weight_of_partition(partitions[vertex],
                                                           partitions,
                                                           vertex_weights);
         let limit = 1.5*(weight_of_partition - ((total_weight)/(num_partitions as f64)));
+
+        let mut calculated_loss = 0i64;
+        let mut dest_partition: usize = 0;
 
         if heavy_partitions.contains(&partitions[vertex]) && (vertex_weights[vertex]) < limit {
             let adjacent_partitions = &get_adjacent_eligible_destination_partitions(
@@ -224,20 +228,21 @@ where
                 &light_partitions);
 
             if adjacent_partitions.len() == 0{
-                partitions_dest[vertex] = light_partitions[thread_rng().gen_range(0..light_partitions.len())];
+                dest_partition = light_partitions[thread_rng().gen_range(0..light_partitions.len())];
             } else {
-                partitions_dest[vertex] = get_most_connected_partition(vertex,
-                                                                       adjacent_partitions,
-                                                                       vertex_connectivity_data_structure);
+                dest_partition = get_most_connected_partition(vertex,
+                                                              adjacent_partitions,
+                                                              vertex_connectivity_data_structure);
             }
-            loss[vertex] = conn(vertex,
-                                partitions[vertex],
-                                vertex_connectivity_data_structure) -
-                           conn(vertex,
-                                partitions_dest[vertex],
-                                vertex_connectivity_data_structure);
+            calculated_loss = conn(vertex,
+                                   partitions[vertex],
+                                   vertex_connectivity_data_structure) -
+                conn(vertex,
+                     dest_partition,
+                     vertex_connectivity_data_structure);
         }
-    }
+        (dest_partition, calculated_loss)
+    }).unzip();
 
     // Slot the loss values into different buckets. This is to prevent sorting the loss values
     // which can be expensive.
@@ -915,11 +920,11 @@ mod tests {
     fn test_jetrw(){
         // Arrange
         let mut adjacency = sprs::CsMat::empty(sprs::CSR, 0);
-        adjacency.insert(0, 1, 3);;
+        adjacency.insert(0, 1, 3);
         adjacency.insert(1, 2, 3);
         adjacency.insert(2, 3, 3);
         adjacency.insert(3, 0, 3);
-        adjacency.insert(1, 0, 3);;
+        adjacency.insert(1, 0, 3);
         adjacency.insert(2, 1, 3);
         adjacency.insert(3, 2, 3);
         adjacency.insert(0, 3, 3);
@@ -944,11 +949,11 @@ mod tests {
     fn test_jetlp() {
         // Arrange
         let mut adjacency = sprs::CsMat::empty(sprs::CSR, 0);
-        adjacency.insert(0, 1, 5);;
+        adjacency.insert(0, 1, 5);
         adjacency.insert(1, 2, 8);
         adjacency.insert(2, 3, 1);
         adjacency.insert(3, 0, 2);
-        adjacency.insert(1, 0, 5);;
+        adjacency.insert(1, 0, 5);
         adjacency.insert(2, 1, 8);
         adjacency.insert(3, 2, 1);
         adjacency.insert(0, 3, 2);
