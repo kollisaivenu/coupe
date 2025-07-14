@@ -43,6 +43,7 @@ where
     let mut locked_vertices = HashSet::new();
 
     while current_iteration < iterations {
+
         let moves;
         if imbalance(num_of_partitions, &partition_iter, weights.par_iter().cloned()) < balance_factor {
             // the jetlp subroutine is used to generate better a better partition
@@ -113,13 +114,14 @@ where
         let mut calculated_gain = 0;
         let mut dest_partition = 0;
         if !locked_vertices.contains(&vertex) {
-            let mut neighbors_eligible_partitions = Vec::new();
+            let mut neighbors_eligible_partitions = HashSet::new();
 
             for (neighbor_vertex, _edge_weight) in graph.neighbors(vertex) {
                 if partition[neighbor_vertex] != partition[vertex] {
-                    neighbors_eligible_partitions.push(partition[neighbor_vertex]);
+                    neighbors_eligible_partitions.insert(partition[neighbor_vertex]);
                 }
             }
+            let neighbors_eligible_partitions: Vec<usize> = neighbors_eligible_partitions.into_iter().collect();
 
             if !neighbors_eligible_partitions.is_empty() {
                 dest_partition = get_most_connected_partition(
@@ -143,6 +145,8 @@ where
         (dest_partition, calculated_gain)
     }).unzip();
 
+
+
     // First filter is applied to check which of the vertices are eligible for moving from one partition
     // to another. Either the gain should be positive or can be slightly negative (based on the filter ratio).
     // Slightly negative gain vertices are also considered in the hope that they could provide better global solutions
@@ -155,10 +159,10 @@ where
 
     // A heuristic attempt is made to approximate the true gain that would occur since
     // two positive moves when applied simultaneously can be detrimental.
-    let mut gain2:HashMap<usize, i64> = HashMap::new();
 
-    for &vertex in &first_filter_eligible_moves {
-
+    let gain2: Vec<i64> = (0..first_filter_eligible_moves.len()).into_par_iter().map(|vertex_index|{
+        let vertex = first_filter_eligible_moves[vertex_index];
+        let mut gain_for_vertex = 0;
         for (neighbor_vertex, edge_weight) in graph.neighbors(vertex){
             let mut partition_source = partition[neighbor_vertex];
 
@@ -167,12 +171,13 @@ where
             }
 
             if partition_source == partition_dest[vertex] {
-                *gain2.entry(vertex).or_insert(0) += edge_weight;
+                gain_for_vertex += edge_weight;
             } else if partition_source == partition[vertex]{
-                *gain2.entry(vertex).or_insert(0) -= edge_weight;
+                gain_for_vertex -= edge_weight;
             }
         }
-    }
+        gain_for_vertex
+    }).collect();
 
     // From the newly calculated approximate gain values, moves that yield positive gain are generated.
     non_negative_gain_filter(&first_filter_eligible_moves, &partition_dest, &gain2)
@@ -221,6 +226,7 @@ where
         let mut dest_partition: usize = 0;
 
         if heavy_partitions.contains(&partitions[vertex]) && (vertex_weights[vertex]) < limit {
+
             let adjacent_partitions = &get_adjacent_eligible_destination_partitions(
                 graph,
                 vertex,
@@ -316,13 +322,15 @@ fn gain_conn_ratio_filter(locked_vertices: &HashSet<usize>, partitions: &[usize]
 
 fn non_negative_gain_filter(first_filter_eligible_moves: &[usize],
                             partition_dest: &[usize],
-                            gain: &HashMap<usize, i64>) -> Vec<Move> {
+                            gain: &Vec<i64>) -> Vec<Move> {
     // Gets the list of moves that have positive gain.
     let mut list_of_moves: Vec<Move> = Vec::new();
 
-    for vertex in first_filter_eligible_moves {
-        if gain[vertex] > 0 {
-            list_of_moves.push(Move{vertex: *vertex, partition_id: partition_dest[*vertex]});
+    for vertex_index in (0..first_filter_eligible_moves.len()) {
+        let vertex = first_filter_eligible_moves[vertex_index];
+
+        if gain[vertex_index] > 0 {
+            list_of_moves.push(Move{vertex: vertex, partition_id: partition_dest[vertex]});
         }
     }
 
@@ -397,10 +405,6 @@ where
             *vertex_connectivity_hashmap
                 .entry(partition_source)
                 .or_insert(0) -= edge_weight;
-
-            if vertex_connectivity_hashmap[&partition_source] == 0{
-                vertex_connectivity_hashmap.remove(&partition_source);
-            }
         }
 
         partition[vertex] = single_move.partition_id;
@@ -435,7 +439,7 @@ fn calculate_slot(loss: i64, max_slot_size: usize) -> usize {
     } else if loss == 0 {
         1
     } else {
-        ((2 + loss.ilog2()) as usize).min(max_slot_size)
+        ((2 + loss.ilog2()) as usize).min(max_slot_size-1)
     }
 }
 
@@ -734,11 +738,8 @@ mod tests {
     #[test]
     fn test_non_negative_gain_filter() {
         // Arrange
-        let mut gain = HashMap::new();
-        gain.insert(0, 3);
-        gain.insert(1, 2);
-        gain.insert(2, -1);
-        let eligible_vertices_to_move = [0, 2];
+        let gain = vec![3, 2, -1];
+        let eligible_vertices_to_move = [0, 1, 2];
         let partition_dest  = [1, 0, 1];
 
         // Act
@@ -748,9 +749,11 @@ mod tests {
             &gain);
 
         // Assert
-        assert_eq!(moves.len(), 1);
+        assert_eq!(moves.len(), 2);
         assert_eq!(moves[0].vertex, 0);
         assert_eq!(moves[0].partition_id, 1);
+        assert_eq!(moves[1].vertex, 1);
+        assert_eq!(moves[1].partition_id, 0);
     }
 
     #[test]
@@ -885,7 +888,7 @@ mod tests {
         assert_eq!(slot1, 0);
         assert_eq!(slot2, 1);
         assert_eq!(slot3, 4);
-        assert_eq!(slot4, 3);
+        assert_eq!(slot4, 2);
     }
 
     #[test]
