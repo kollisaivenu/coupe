@@ -131,11 +131,6 @@ fn heavy_edge_matching_coarse<T>(graph: T, seed: Option<u64>, weights: &[f64]) -
                 let total_edge_weight = edge_to_weight_mapping.entry(key).or_insert(0);
                 *total_edge_weight += edge_weight;
             }
-            // } else {
-            //     println!("vertex {}", vertex);
-            //     println!("neighbor {}", neighbor);
-            // }
-
         }
     }
 
