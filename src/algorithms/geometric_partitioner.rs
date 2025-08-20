@@ -258,7 +258,7 @@ fn scale_points(points: &Mat<f64>) -> Mat<f64>{
     xy_scaled
 }
 
-fn geopart<T>(graph: &T, xy: &Mat<f64>, ntries: i64, partition: &mut [usize]) where T: Topology<i64> + Sync  {
+fn geopart<T>(graph: T, xy: &Mat<f64>, ntries: i64, partition: &mut [usize]) where T: Topology<i64> + Sync + Copy  {
     let npoints = xy.nrows();
     let dim = xy.ncols();
     let nlines = ((ntries as f64/2.)*(dim as f64/(dim as f64+1.))).floor();
@@ -289,7 +289,7 @@ fn geopart<T>(graph: &T, xy: &Mat<f64>, ntries: i64, partition: &mut [usize]) wh
 
 // This function finds the best separating great circle by generating random trials biased by inertial weighting
 // to improve the quality of the resulting partition.
-fn sep_circle<T>(graph: &T, xyz: &Mat<f64>, ntries: usize) -> (Mat<f64>, i64) where T: Topology<i64> + Sync{
+fn sep_circle<T>(graph: T, xyz: &Mat<f64>, ntries: usize) -> (Mat<f64>, i64) where T: Topology<i64> + Sync + Copy {
     let (_, dim) = xyz.shape();
 
     let xyz_transpose = xyz.transpose();
@@ -313,7 +313,7 @@ fn sep_circle<T>(graph: &T, xyz: &Mat<f64>, ntries: usize) -> (Mat<f64>, i64) wh
             sep_circle[(0, c_idx)] = circle[c_idx];
         }
 
-        let current_quality = sep_quality(&sep_circle, &graph, xyz);
+        let current_quality = sep_quality(&sep_circle, graph, xyz);
 
         if current_quality < best_gc_quality {
             best_gc_quality = current_quality;
@@ -325,7 +325,7 @@ fn sep_circle<T>(graph: &T, xyz: &Mat<f64>, ntries: usize) -> (Mat<f64>, i64) wh
 }
 
 // This function calculates the quality of a partition defined by the edge-cut.
-fn sep_quality<T>(v: &Mat<f64>, graph: &T, xyz: &Mat<f64>) -> i64 where T: Topology<i64> + Sync{
+fn sep_quality<T>(v: &Mat<f64>, graph: T, xyz: &Mat<f64>) -> i64 where T: Topology<i64> + Sync{
     let mut partition = vec![0; graph.len()];
     perform_partition(xyz, &v, &mut partition);
 
@@ -373,15 +373,15 @@ fn perform_partition(xyz: &Mat<f64>, sep_plane: &Mat<f64>, partition: &mut [usiz
     let num_of_values_less_than_median = values_smaller_than_median_indices.len();
 
     if num_of_values_equal_to_median > 0 {
-        let nca_target_for_balance = ((n as f64 / 2.0).ceil() as usize).saturating_sub(num_of_values_less_than_median);
-        let nca_to_assign_to_a = nca_target_for_balance.min(num_of_values_equal_to_median);
+        let num_of_values_for_balance_a = ((n as f64 / 2.0).ceil() as usize).saturating_sub(num_of_values_less_than_median);
+        let num_of_values_to_assign_to_a = num_of_values_for_balance_a.min(num_of_values_equal_to_median);
 
-        if nca_to_assign_to_a > 0 {
-            values_smaller_than_median_indices.extend_from_slice(&values_equal_to_median_indices[0..nca_to_assign_to_a]);
+        if num_of_values_to_assign_to_a > 0 {
+            values_smaller_than_median_indices.extend_from_slice(&values_equal_to_median_indices[0..num_of_values_to_assign_to_a]);
         }
 
-        if nca_to_assign_to_a < num_of_values_equal_to_median {
-            values_greater_than_median_indices.extend_from_slice(&values_equal_to_median_indices[nca_to_assign_to_a..num_of_values_equal_to_median]);
+        if num_of_values_to_assign_to_a < num_of_values_equal_to_median {
+            values_greater_than_median_indices.extend_from_slice(&values_equal_to_median_indices[num_of_values_to_assign_to_a..num_of_values_equal_to_median]);
         }
     }
 
@@ -395,7 +395,7 @@ fn perform_partition(xyz: &Mat<f64>, sep_plane: &Mat<f64>, partition: &mut [usiz
 }
 
 // This function computes co-ordinates for each node using forceatlas2 algorithm.
-fn convert_graph_to_coordinates<T>(graph: &T, weights: Vec<f64>, iter:u64) -> Mat<f64> where T: Topology<i64> + Sync{
+fn convert_graph_to_coordinates<T>(graph: T, weights: Vec<f64>, iter:u64) -> Mat<f64> where T: Topology<i64> + Sync{
     let mut edges = Vec::new();
 
     for node in 0..graph.len() {
@@ -425,6 +425,49 @@ fn convert_graph_to_coordinates<T>(graph: &T, weights: Vec<f64>, iter:u64) -> Ma
 
     points_mat
 }
+
+/// Geometric Partitioner
+///
+/// An implementation of the Geometric Partitioner algorithm
+/// for graph partition.
+///
+/// # Example
+///
+/// ```rust
+/// # fn main() -> Result<(), coupe::Error> {
+/// use std::path::Path;
+/// use rand::{thread_rng, Rng};
+/// use sprs::{io, CsMat, TriMat};
+/// use coupe::{GeometricPartitioner, Partition as _, Partition, Topology};
+/// use coupe::imbalance::imbalance;
+/// use coupe::Point2D;
+/// let vt2010_file_path = Path::new("vt2010.mtx");
+/// let tri_mat: TriMat<i64> = io::read_matrix_market(vt2010_file_path).unwrap();
+/// let mut graph: CsMat<i64> = tri_mat.to_csr();
+/// let mut rng = thread_rng();
+/// let weights: Vec<f64> = (0..graph.view().len())
+///         .map(|_| rng.gen_range(1..100) as f64)
+///         .collect();
+///
+/// let mut partition = vec![0; graph.view().len()];
+///
+/// GeometricPartitioner {..Default::default()}.partition(&mut partition, (graph.view(), &weights))?;
+/// let edge_cut = graph.view().edge_cut(&partition);
+///
+/// // Note: The edge cut is not theoretically guaranteed to lie between 700,000,000 and 800,000,000.
+/// // However, experiments consistently produced values within this range, so the following assertion
+/// // is used as a practical check.
+///
+/// assert!(edge_cut >= 700000000 && edge_cut <= 800000000);
+/// Ok(())
+/// }
+/// ```
+///
+/// # Reference
+///
+/// Gilbert, John R., Gary L. Miller, and Shang-Hua Teng.
+/// "Geometric mesh partitioning: Implementation and experiments."
+/// SIAM Journal on Scientific Computing 19, no. 6 (1998): 2091-2110.
 
 #[derive(Debug, Clone, Copy)]
 pub struct GeometricPartitioner {
@@ -479,21 +522,21 @@ mod tests {
     use crate::Partition;
     use super::*;
 
-    fn assert_matrices_approx_eq(a: &Mat<f64>, b: &Mat<f64>, tolerance: f64) {
-        if a.nrows() != b.nrows() || a.ncols() != b.ncols() {
-            panic!("Matrices have different dimensions: a is {}x{}, b is {}x{}", a.nrows(), a.ncols(), b.nrows(), b.ncols());
+    fn assert_matrices_approx_eq(left_mat: &Mat<f64>, right_mat: &Mat<f64>, tolerance: f64) {
+        if left_mat.nrows() != right_mat.nrows() || left_mat.ncols() != right_mat.ncols() {
+            panic!("Matrices have different dimensions: a is {}x{}, b is {}x{}", left_mat.nrows(), left_mat.ncols(), right_mat.nrows(), right_mat.ncols());
         }
 
-        for i in 0..a.nrows() {
-            for j in 0..a.ncols() {
-                let diff = (a[(i, j)] - b[(i, j)]).abs();
+        for i in 0..left_mat.nrows() {
+            for j in 0..left_mat.ncols() {
+                let diff = (left_mat[(i, j)] - right_mat[(i, j)]).abs();
                 if diff > tolerance {
                     panic!(
-                        "Matrices differ at element ({}, {}). A: {}, B: {}, Diff: {}, Tolerance: {}",
+                        "Matrices differ at element ({}, {}). Left Matrix: {}, Right Matrix: {}, Diff: {}, Tolerance: {}",
                         i,
                         j,
-                        a[(i, j)],
-                        b[(i, j)],
+                        left_mat[(i, j)],
+                        right_mat[(i, j)],
                         diff,
                         tolerance
                     );

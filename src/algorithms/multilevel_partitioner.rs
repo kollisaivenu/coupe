@@ -191,6 +191,43 @@ fn convert_graph_to_coordinates<T>(graph: &T, weights: Vec<f64>, iter:u64) -> Ve
 
     points
 }
+/// Geometric Partitioner
+///
+/// An implementation of the Multilevel (Heavy Edge Matching && (Recursive Coordinate Bisection || Geometric Partitioner))
+/// Partitioner algorithm for graph partition.
+///
+/// # Example
+///
+/// ```rust
+/// # fn main() -> Result<(), coupe::Error> {
+/// use std::path::Path;
+/// use rand::{thread_rng, Rng};
+/// use sprs::{io, CsMat, TriMat};
+/// use coupe::{MultiLevelPartitioner, Topology, Partition as _};
+/// use coupe::imbalance::imbalance;
+/// use coupe::Point2D;
+/// let vt2010_file_path = Path::new("vt2010.mtx");
+/// let tri_mat: TriMat<i64> = io::read_matrix_market(vt2010_file_path).unwrap();
+/// let mut graph: CsMat<i64> = tri_mat.to_csr();
+/// let mut rng = thread_rng();
+/// let weights: Vec<f64> = (0..graph.view().len())
+///         .map(|_| rng.gen_range(1..100) as f64)
+///         .collect();
+///
+/// let mut partition = vec![0; graph.view().len()];
+///
+/// MultiLevelPartitioner {..Default::default()}.partition(&mut partition, (graph.view(), &weights))?;
+/// let edge_cut = graph.view().edge_cut(&partition);
+///
+/// // Note: The edge cut is not theoretically guaranteed to lie between 20,000,000 and 30,000,000.
+/// // However, experiments consistently produced values within this range, so the following assertion
+/// // is used as a practical check.
+///
+/// assert!(edge_cut >= 20000000 && edge_cut <= 30000000);
+/// Ok(())
+/// }
+/// ```
+///
 
 #[derive(Debug, Clone, Copy)]
 pub struct MultiLevelPartitioner {
