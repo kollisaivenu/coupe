@@ -258,7 +258,7 @@ fn scale_points(points: &Mat<f64>) -> Mat<f64>{
     xy_scaled
 }
 
-fn geopart<T>(graph: T, xy: &Mat<f64>, ntries: i64, partition: &mut [usize]) where T: Topology<i64> + Sync + Copy  {
+fn geopart<T>(graph: T, xy: &Mat<f64>, ntries: i64, partition: &mut [usize]) where T: Topology<i64> + Sync  {
     let npoints = xy.nrows();
     let dim = xy.ncols();
     let nlines = ((ntries as f64/2.)*(dim as f64/(dim as f64+1.))).floor();
@@ -277,7 +277,7 @@ fn geopart<T>(graph: T, xy: &Mat<f64>, ntries: i64, partition: &mut [usize]) whe
         let cpt = centerpoint(&xyz, csample);
 
         let (xyzmap, _) = con_map(&cpt, &xyz);
-        let (great_circle, gc_quality) = sep_circle(graph, &xyzmap, ninner);
+        let (great_circle, gc_quality) = sep_circle(&graph, &xyzmap, ninner);
 
         if gc_quality < circle_quality {
             circle_quality = gc_quality;
@@ -289,7 +289,7 @@ fn geopart<T>(graph: T, xy: &Mat<f64>, ntries: i64, partition: &mut [usize]) whe
 
 // This function finds the best separating great circle by generating random trials biased by inertial weighting
 // to improve the quality of the resulting partition.
-fn sep_circle<T>(graph: T, xyz: &Mat<f64>, ntries: usize) -> (Mat<f64>, i64) where T: Topology<i64> + Sync + Copy {
+fn sep_circle<T>(graph: &T, xyz: &Mat<f64>, ntries: usize) -> (Mat<f64>, i64) where T: Topology<i64> + Sync {
     let (_, dim) = xyz.shape();
 
     let xyz_transpose = xyz.transpose();
