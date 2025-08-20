@@ -276,9 +276,10 @@ where
         for slot in 0..max_slots {
 
             for &vertex in &bucket[get_index_for_bucket(index, slot, max_slots)] {
-                m = m + (vertex_weights[vertex]);
+                //m = m + (vertex_weights[vertex]);
 
                 if m < m_max {
+                    m = m + (vertex_weights[vertex]);
                     moves.push(Move{vertex, partition_id: partitions_dest[vertex]});
                 }
             }
@@ -470,7 +471,7 @@ fn get_weight_of_partition(partition_id: usize, partitions: &[usize], vertex_wei
 
     for (index, partition) in partitions.iter().enumerate() {
 
-        if partition == &partition_id {
+        if *partition == partition_id {
             weight += vertex_weights[index] as f64;
         }
     }
