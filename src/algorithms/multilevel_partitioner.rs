@@ -1,7 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::fmt::Display;
-use std::io::Write;
-use std::time::Instant;
 use rand::seq::SliceRandom;
 use rand::{SeedableRng};
 use rand::rngs::StdRng;
@@ -23,7 +20,6 @@ fn multilevel_partitioner(
     initial_partitioner: InitialPartitioner,
     tolerance: f64
 ) {
-    let start = Instant::now();
     let mut coarse_graph_after_operation = adjacency.to_owned();
     let mut coarse_graphs = Vec::new();
     let mut vertex_mappings = Vec::new();
@@ -52,10 +48,6 @@ fn multilevel_partitioner(
 
     }
 
-    let duration1 = start.elapsed();
-    println!("initial partition imbalance {}", imbalance(2, &coarse_graph_partition, weights_of_coarse_graph_after_operation.clone()));
-    println!("initial partition edge cut {}", coarse_graph_after_operation.view().edge_cut(&coarse_graph_partition));
-    let start = Instant::now();
     let mut index = coarse_graphs.len() - 2;
 
     while index >= 0 {
@@ -69,8 +61,6 @@ fn multilevel_partitioner(
     }
     let final_graph_partition = partition_uncoarse(&coarse_graph_partition, &vertex_mappings[0]);
     partition.copy_from_slice(&final_graph_partition);
-    let duration2 = start.elapsed();
-    println!("total time {:?}", duration1 + duration2);
 }
 
 // This function coarsens the graph using heavy edge matching algorithm.

@@ -1,10 +1,7 @@
-use std::fs::File;
 use std::io::Write;
 use forceatlas2;
 use crate::{Error};
-use sprs::io::read_matrix_market;
 use crate::{Topology};
-use sprs::{TriMat};
 use num_traits::abs;
 use rand::{thread_rng, Rng};
 use faer::{prelude::*, Mat};
