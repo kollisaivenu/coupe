@@ -151,8 +151,8 @@ fn radon(points: &Mat<f64>) -> Mat<f64> {
 
     if num_points != dim + 2 {
         panic!(
-            "Radon function expects num_points ({}) = dim_plus_1 ({}) + 2",
-            num_points, dim
+            "Radon function expects at least {} points but got only {} points instead",
+            dim + 2, num_points
         );
     }
 
