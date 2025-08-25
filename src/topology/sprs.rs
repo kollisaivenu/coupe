@@ -34,6 +34,8 @@ where
     where
         E: Sum + Send,
     {
+        debug_assert_eq!(self.len(), partition.len());
+
         let indptr = self.indptr().into_raw_storage();
         let indices = self.indices();
         let data = self.data();
